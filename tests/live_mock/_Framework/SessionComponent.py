@@ -3,3 +3,4 @@ class SessionComponent(object):
     def set_mixer(self, m): pass
     def set_track_bank_buttons(self, r, l): self.bank = (r, l)
     def track_offset(self): return 0
+    def set_show_highlight(self, show): self.show_highlight = show

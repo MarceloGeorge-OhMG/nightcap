@@ -106,7 +106,9 @@ import time; t = time.time; time.time = lambda: t() - 0 ; s._learn.receive(127);
 assert os.listdir(AM.MAPPING_DIR) == [] and s._crossfader.mapped is None; ok('long-press Learn resets mapping')
 
 # mixer mode
+assert s._session.show_highlight is False; ok('track box hidden in NightCap mode')
 s._mixer_button.receive(127)
+assert s._session.show_highlight is True; ok('track box shown in Mixer mode')
 assert all(s._encoders[i].mapped == 'volume of strip %d' % i for i in range(8)); ok('mixer mode: knobs control track volumes')
 song.view.select_device(eq); s.tick()
 assert all(s._encoders[i].mapped == 'volume of strip %d' % i for i in range(8)); ok('mixer mode: changing device keeps knobs on volumes')

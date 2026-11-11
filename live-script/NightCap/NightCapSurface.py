@@ -187,12 +187,27 @@ class NightCapSurface(ControlSurface):
                                              self._page_down if mixer else None)
         if nightcap:
             self._nightcap.set_active(True)
+        self._show_track_box(mixer)
         self._update_crossfader()
         self._update_button_leds()
         if self._wrapper_active:
             self.show_message('NightCap: NightCap wrapper in control (press Mixer to return)')
         self.request_hud(True)
         self.request_rebuild_midi_map()
+
+    def _show_track_box(self, show):
+        """Live outlines the 8 tracks the mixer controls (in this control surface's colour).
+        Only show it in Mixer mode; in NightCap mode the knobs follow the selected device."""
+        try:
+            self._session.set_show_highlight(show)
+            return
+        except AttributeError:
+            pass
+        if not show:
+            try:
+                self._set_session_highlight(-1, -1, -1, -1, False)
+            except Exception:
+                pass
 
     def _update_crossfader(self):
         param = self._nightcap.crossfader_param() if not self._wrapper_active else None
