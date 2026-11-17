@@ -23,12 +23,69 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdarg.h>
+#include <sys/stat.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include "nightcap_core.h"
 
-#define LOG(...) do { fprintf(stderr, "[nightcap] " __VA_ARGS__); fputc('\n', stderr); } while (0)
+/* ---- logging: Terminal (stderr) and ~/Library/Logs/NightCap/NightCapBridge.log ---- */
+/* NC_LOG_BEGIN */
+static FILE *nc_log_file(void) {
+    static FILE *f;
+    static int tried;
+    if (tried) return f;
+    tried = 1;
+    const char *home = getenv("HOME");
+    if (!home) return NULL;
+    char dir[1024], path[1200], old[1200];
+    snprintf(dir, sizeof dir, "%s/Library", home);
+    mkdir(dir, 0755);
+    snprintf(dir, sizeof dir, "%s/Library/Logs", home);
+    mkdir(dir, 0755);
+    snprintf(dir, sizeof dir, "%s/Library/Logs/NightCap", home);
+    mkdir(dir, 0755);
+    snprintf(path, sizeof path, "%s/NightCapBridge.log", dir);
+    struct stat st;
+    if (stat(path, &st) == 0 && st.st_size > 1024 * 1024) {     /* keep it under 1 MB */
+        snprintf(old, sizeof old, "%s/NightCapBridge.old.log", dir);
+        rename(path, old);
+    }
+    f = fopen(path, "a");
+    return f;
+}
+
+static void nc_log(const char *fmt, ...) {
+    static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+    /* trylock with a short wait, so a log call from the quit signal handler can't deadlock */
+    int locked = 0;
+    for (int i = 0; i < 50 && !(locked = (pthread_mutex_trylock(&m) == 0)); i++) usleep(1000);
+    char ts[32];
+    time_t t = time(NULL);
+    struct tm tmv;
+    localtime_r(&t, &tmv);
+    strftime(ts, sizeof ts, "%Y-%m-%d %H:%M:%S", &tmv);
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stderr, "[nightcap] ");
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+    va_end(ap);
+    FILE *f = nc_log_file();
+    if (f) {
+        va_start(ap, fmt);
+        fprintf(f, "%s  ", ts);
+        vfprintf(f, fmt, ap);
+        fputc('\n', f);
+        fflush(f);
+        va_end(ap);
+    }
+    if (locked) pthread_mutex_unlock(&m);
+}
+/* NC_LOG_END */
+#define LOG(...) nc_log(__VA_ARGS__)
 
 typedef IOUSBDeviceInterface650    **DevIf;
 typedef IOUSBInterfaceInterface650 **IntfIf;
@@ -569,6 +626,7 @@ int main(int argc, char **argv) {
     pthread_mutex_init(&G.lock, NULL);
     nc_init(&G.core, &cfg, usb_write_cb, midi_out_cb, NULL);
     G.core.mode_changed = mode_changed_cb;
+    LOG("---- NightCapBridge starting (pid %d)%s ----", (int)getpid(), G.verbose ? ", verbose" : "");
 
     OSStatus st = MIDIClientCreate(CFSTR("NightCapBridge"), NULL, NULL, &G.client);
     for (int p = 0; p < NC_NUM_PORTS && !st; p++) {

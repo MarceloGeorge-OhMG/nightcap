@@ -73,6 +73,7 @@ private:
     NightCapClient* focused = nullptr;
     int bridgeMode = 0;
     int connectCountdown = 0;
+    juce::String lastLoggedState;
 
     juce::CriticalSection queueLock;
     std::vector<juce::MidiMessage> queue;

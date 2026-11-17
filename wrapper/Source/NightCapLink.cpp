@@ -1,4 +1,5 @@
 #include "NightCapLink.h"
+#include "NightCapLog.h"
 
 static const juce::uint8 sysexHeader[] = { 0x7D, 0x4B, 0x4E, 0x43 };
 
@@ -32,6 +33,14 @@ void NightCapLink::tryConnect()
                 output = juce::MidiOutput::openDevice (d.identifier);
                 break;
             }
+
+    const juce::String state = juce::String ("MIDI link to \"") + portName + "\": input " + (input != nullptr ? "open" : "not found")
+                         + ", output " + (output != nullptr ? "open" : "not found");
+    if (state != lastLoggedState)          // retried every 2 s while NightCapBridge isn't running
+    {
+        lastLoggedState = state;
+        NightCapLog::log (state);
+    }
 
     if (isConnected() && focused != nullptr)
         focused->hardwareRepaintLeds();

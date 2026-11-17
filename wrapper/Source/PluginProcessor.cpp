@@ -62,16 +62,41 @@ NightCapProcessor::NightCapProcessor() : AudioProcessor (makeBuses())
         proxies.add (p);
         addParameter (p);
     }
-    link->addClient (this);
+    // Nothing else here: no MIDI, files or timers until the plug-in is actually used (see ensureRuntime).
+    NightCapLog::log ("created", this);
+}
+
+void NightCapProcessor::ensureRuntime()
+{
+    if (runtimeStarted) return;
+    if (! MessageManager::existsAndIsCurrentThread())
+    {
+        NightCapLog::log ("ensureRuntime called off the message thread - deferring", this);
+        ensureRuntimeSoon();
+        return;
+    }
+    runtimeStarted = true;
+    NightCapLog::log ("starting (plug-in list, MIDI link, timer)", this);
+    catalog.emplace();
+    link.emplace();
+    link->get().addClient (this);
     startTimerHz (30);
+    NightCapLog::log (String ("started - NightCapBridge ") + (link->get().isConnected() ? "connected" : "not found (is it running?)"), this);
+}
+
+void NightCapProcessor::ensureRuntimeSoon()
+{
+    if (runtimeStarted) return;
+    MessageManager::callAsync ([this, flag = alive] { if (flag->load()) ensureRuntime(); });
 }
 
 NightCapProcessor::~NightCapProcessor()
 {
     alive->store (false);
     stopTimer();
+    NightCapLog::log ("destroying", this);
     for (int slot = 0; slot <= slotsPerPage; ++slot) endSlotGesture (slot);
-    link->removeClient (this);
+    if (auto* l = linkPtr()) l->removeClient (this);
     if (auto* inst = current.exchange (nullptr))
         inst->removeListener (this);
     owned.reset();
@@ -115,6 +140,10 @@ void NightCapProcessor::prepareToPlay (double sr, int bs)
     sampleRate = sr;
     blockSize = bs;
     prepared = true;
+    NightCapLog::log ("prepareToPlay " + String (sr) + " Hz, " + String (bs) + " samples", this);
+    // Deliberately no ensureRuntime here: hosts often call prepareToPlay off the message thread,
+    // and posting to the message thread from there races with some hosts' event loops. The
+    // runtime starts when the editor opens, a plug-in is loaded, or a saved one is restored.
     if (auto* inst = current.load())
     {
         prepareHosted (*inst);
@@ -193,7 +222,10 @@ String NightCapProcessor::getHostedName() const
 bool NightCapProcessor::loadPlugin (const PluginDescription& desc, String& error)
 {
     jassert (MessageManager::existsAndIsCurrentThread());
-    auto inst = catalog->formats.createPluginInstance (desc, sampleRate, blockSize, error);
+    ensureRuntime();
+    NightCapLog::log ("loading plug-in: " + desc.name + " (" + desc.pluginFormatName + ")", this);
+    auto inst = catalog->get().formats.createPluginInstance (desc, sampleRate, blockSize, error);
+    if (inst == nullptr) NightCapLog::log ("  could not load " + desc.name + ": " + error, this);
     if (inst == nullptr) return false;
 
     configureBuses (*inst);
@@ -502,7 +534,7 @@ void NightCapProcessor::hardwareControl (int cc, int value)
         case user:     handleProgramStep (-1); break;
         case fx:       handleProgramStep (1); break;
         case inst:     bypassHosted = ! bypassHosted.load(); sendLeds (false); displayChanged.sendChangeMessage(); break;
-        case mixer:    link->releaseToDaw(); break;
+        case mixer:    releaseHardware(); break;
         default: break;
     }
 }
@@ -534,10 +566,10 @@ void NightCapProcessor::hardwareRepaintLeds()
 
 void NightCapProcessor::sendLeds (bool force)
 {
-    if (! link->hasFocus (this)) return;
+    if (! hasHardwareFocus()) return;
     auto send = [&] (int cc, int v)
     {
-        if (force || ledCache[cc] != v) { ledCache[cc] = v; link->sendCC (this, cc, v); }
+        if (force || ledCache[cc] != v) { ledCache[cc] = v; linkPtr()->sendCC (this, cc, v); }
     };
     using namespace NightCapCC;
     for (int s = 0; s < slotsPerPage; ++s)
@@ -561,7 +593,7 @@ void NightCapProcessor::sendLeds (bool force)
 void NightCapProcessor::timerCallback()
 {
     if (focusRequested.exchange (false))
-        link->setFocus (this, true);
+        linkPtr()->setFocus (this, true);
 
     // learn: a parameter was moved in the plug-in's own UI
     const int ui = lastUiParam.exchange (-1);
@@ -620,6 +652,7 @@ void NightCapProcessor::getStateInformation (MemoryBlock& dest)
 
 void NightCapProcessor::setStateInformation (const void* data, int size)
 {
+    NightCapLog::log ("restoring state (" + String (size) + " bytes)", this);
     std::shared_ptr<XmlElement> xml (getXmlFromBinary (data, size).release());
     if (xml == nullptr || ! xml->hasTagName ("NIGHTCAP")) return;
 
@@ -661,6 +694,8 @@ void NightCapProcessor::setStateInformation (const void* data, int size)
 
 AudioProcessorEditor* NightCapProcessor::createEditor()
 {
+    NightCapLog::log ("opening editor", this);
+    ensureRuntime();
     return new NightCapEditor (*this);
 }
 

@@ -3,6 +3,8 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include "NightCapLink.h"
 #include "PluginCatalog.h"
+#include "NightCapLog.h"
+#include <optional>
 
 class NightCapProcessor;
 
@@ -100,11 +102,18 @@ public:
     void setLearnSlot (int s) { learnSlot = s; displayChanged.sendChangeMessage(); }
     int getTouchedSlot() const noexcept { return touchedSlot; }
     void resetMapping();                         // back to "all parameters in order"
-    void claimHardware()                          { link->setFocus (this, true); }
-    void releaseHardware()                        { link->releaseToDaw(); }
-    bool hasHardwareFocus() const                 { return link->hasFocus (this); }
-    NightCapLink& getLink()                       { return *link; }
-    PluginCatalog& getCatalog()                  { return *catalog; }
+    void claimHardware()                          { ensureRuntime(); if (auto* l = linkPtr()) l->setFocus (this, true); }
+    void releaseHardware()                        { if (auto* l = linkPtr()) l->releaseToDaw(); }
+    bool hasHardwareFocus() const                 { auto* l = linkPtr(); return l != nullptr && l->hasFocus (this); }
+    NightCapLink& getLink()                       { ensureRuntime(); return link->get(); }
+    PluginCatalog& getCatalog()                  { ensureRuntime(); return catalog->get(); }
+
+    /** Starts the parts a plug-in scan never needs: the MIDI connection to NightCapBridge, the
+        plug-in list and the UI timer. Hosts often create a plug-in just to scan it (sometimes on a
+        background thread or in a helper process), so the constructor does none of this; it runs
+        the first time the plug-in is really used. Message thread only. */
+    void ensureRuntime();
+    bool isRuntimeStarted() const noexcept { return runtimeStarted; }
 
     // NightCapClient
     void hardwareControl (int cc, int value) override;
@@ -135,8 +144,11 @@ private:
     void sendLeds (bool force);
     void handleProgramStep (int step);
 
-    juce::SharedResourcePointer<NightCapLink> link;
-    juce::SharedResourcePointer<PluginCatalog> catalog;
+    std::optional<juce::SharedResourcePointer<NightCapLink>> link;
+    std::optional<juce::SharedResourcePointer<PluginCatalog>> catalog;
+    bool runtimeStarted = false;
+    NightCapLink* linkPtr() const noexcept { return link.has_value() ? &link->get() : nullptr; }
+    void ensureRuntimeSoon();
 
     std::unique_ptr<juce::AudioPluginInstance> owned;
     std::atomic<juce::AudioPluginInstance*> current { nullptr };

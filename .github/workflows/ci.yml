@@ -24,3 +24,23 @@ jobs:
         run: |
           cmake -S wrapper -B wrapper/build -DCMAKE_BUILD_TYPE=Release
           cmake --build wrapper/build --config Release -j 3
+      - name: Validate plug-ins with pluginval (what host scanners do, incl. Apple's auval for AU)
+        run: |
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          unzip -q pluginval.zip
+          PV=pluginval.app/Contents/MacOS/pluginval
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          P="$HOME/Library/Audio/Plug-Ins"
+          for plug in "$P/VST3/NightCap.vst3" "$P/VST3/NightCap FX.vst3" \
+                      "$P/Components/NightCap.component" "$P/Components/NightCap FX.component"; do
+            echo "::group::$plug"
+            "$PV" --strictness-level 10 --skip-gui-tests --validate "$plug"
+            echo "::endgroup::"
+          done
+      - name: Upload NightCap plug-in log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightcap-plugin-log
+          path: ~/Library/Logs/NightCap/
+          if-no-files-found: ignore

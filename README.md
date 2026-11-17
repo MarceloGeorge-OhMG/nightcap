@@ -73,9 +73,24 @@ Learn, then fades. Drag it anywhere and it remembers the position. The menu-bar 
 - **No HUD, or the Live script seems ignored.** Check that Live's Control Surface is set to **NightCap**, not an older "Nocturn" entry
   left by Novation's software. If an old `Nocturn` folder exists in `~/Library/Preferences/Ableton/Live <version>/User Remote Scripts/`,
   you can move it away.
-- **Script diagnostics.** The Live script writes `nightcap_debug.log` next to itself (startup steps, errors, first HUD message).
-- **Driver diagnostics.** Run `NightCapBridge -v` to see every USB packet and MIDI message.
 - **"device is held by another process"** means Novation's old driver is still installed. Remove it and reboot.
+- **A host fails or crashes while scanning the wrapper plug-ins** (REAPER, Bespoke, Reflection, ...):
+  - If you installed a NightCap build you downloaded rather than built yourself, macOS may have quarantined it. Clear that with
+    `xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/NightCap*.vst3 ~/Library/Audio/Plug-Ins/Components/NightCap*.component`
+    and rescan.
+  - Check the plug-in log (below). Its last lines show how far NightCap got before the host stopped.
+  - [pluginval](https://github.com/Tracktion/pluginval) checks a plug-in the way host scanners do:
+    `pluginval --strictness-level 5 --validate ~/Library/Audio/Plug-Ins/VST3/NightCap.vst3`.
+
+### Logs
+| what | where |
+|---|---|
+| Wrapper plug-ins (NightCap, NightCap FX) | `~/Library/Logs/NightCap/NightCap Plugin.log`. Each session starts with the host name, plug-in format, host process and macOS version, then one line per step (created, editor opened, plug-in loaded, MIDI link, destroyed). |
+| NightCapBridge (driver) | `~/Library/Logs/NightCap/NightCapBridge.log`, and the Terminal window. Run `NightCapBridge -v` to also see every USB packet and MIDI message in the Terminal. |
+| Live script | `nightcap_debug.log` in `~/Music/Ableton/User Library/Remote Scripts/NightCap/` (startup steps, errors, which mapping each device uses). |
+| Crashes | macOS writes a crash report for the app that crashed, which for a plug-in is the host (e.g. `REAPER`, `BespokeSynth`) or its scanner helper process. Find them in **Console → Crash Reports**, or `~/Library/Logs/DiagnosticReports/` (`.ips` files). |
+
+**Reporting a problem:** please include the host and its version, the relevant log above, and any crash report from around the same time.
 
 ## Tests
 ```sh
