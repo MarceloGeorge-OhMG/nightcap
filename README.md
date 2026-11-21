@@ -12,7 +12,7 @@ native 64-bit replacement, with Ableton Live in particular in mind.
 |---|---|
 | **NightCapBridge** (`bridge/`) | User-space USB driver. Talks to the Nocturn directly (no kernel extension) and presents it as MIDI ports called **NightCap** (and **NightCap Wrapper** for the optional plug-ins). Also draws the **HUD** and puts a dial icon in the menu bar. |
 | **NightCap Live script** (`live-script/`) | NightCap for Ableton Live 11/12. The Nocturn controls whichever device is selected (Live devices, VST, AU) with pages of 8, learn, mappings saved per plug-in, LED-ring feedback, and a mixer mode. **No wrapper plug-in needed.** |
-| **NightCap plug-ins** (`wrapper/`, optional) | AU/VST3 wrappers that host another plug-in and map all its parameters to the Nocturn: for other DAWs, or plug-ins with more than 128 parameters. |
+| **NightCap plug-ins** (`wrapper/`, optional) | AU/VST3 wrappers that host another plug-in and map all its parameters to the Nocturn: for other DAWs, or plug-ins with more than 128 parameters. See the [wrapper guide](docs/WRAPPER.md). |
 
 ## Install
 Requires the Xcode Command Line Tools (`xcode-select --install`).

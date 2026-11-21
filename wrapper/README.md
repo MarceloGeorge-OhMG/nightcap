@@ -4,6 +4,8 @@ AU + VST3 plug-ins (**NightCap** for instruments, **NightCap FX** for effects) t
 plug-in and map all of its parameters to the Nocturn controller, with pages, learn, and a parameter display. They are only needed
 for DAWs other than Ableton Live, or for plug-ins with more than 128 parameters (Live's limit for exposing parameters).
 
+**User guide, with screenshots:** [docs/WRAPPER.md](../docs/WRAPPER.md).
+
 Build: `sh install.sh --with-wrapper` from the repository root (needs CMake; JUCE 8.0.4 is downloaded automatically),
 or `cmake -S wrapper -B wrapper/build && cmake --build wrapper/build`.
 
