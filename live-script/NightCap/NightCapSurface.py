@@ -1,3 +1,5 @@
+# Modified in 2026 by Marcelo George: Page+ remapped to CC 111 (Live swallows CC 123), Mixer mode bank jump,
+# page lights, transport and master-volume buttons. Original work Copyright 2026 Brendan McEnroe (Apache-2.0).
 """
 NightCap - Ableton Live remote script with native NightCap (no wrapper plug-in needed).
 

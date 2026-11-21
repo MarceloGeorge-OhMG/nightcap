@@ -1,3 +1,5 @@
+/* Modified in 2026 by Marcelo George: Page+ CC 123 <-> 111 translation; Live feedback for CC 72 is no longer
+ * forwarded to the Nocturn. Original work Copyright 2026 Brendan McEnroe (Apache-2.0). */
 /*
  * NightCapBridge - native Apple Silicon / Intel driver for the Novation Nocturn controller.
  *
