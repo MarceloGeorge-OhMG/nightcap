@@ -198,7 +198,10 @@ static void midi_in_proc(const MIDIPacketList *pl, void *refCon, void *srcRef) {
             Byte hi = st & 0xF0;
             UInt16 size = (hi == 0xC0 || hi == 0xD0) ? 2 : 3;
             if (j + size > len) break;
-            if (hi == 0xB0 && (st & 0x0F) == G.channel && G.connected)
+            /* Live's feedback for the crossfader (CC 72) must not reach the Nocturn: CC 72 is the ring-style
+             * register of encoder 1 there, which would garble that encoder's LED ring. */
+            if (hi == 0xB0 && (st & 0x0F) == G.channel && G.connected &&
+                !(port == 0 && (pk->data[j + 1] & 0x7F) == 72))
                 nc_on_host_cc(&G.core, port, (port == 0 && (pk->data[j + 1] & 0x7F) == 111) ? 123 : (pk->data[j + 1] & 0x7F), pk->data[j + 2] & 0x7F);   /* Page+ LED: CC 111 from Live -> hardware CC 123 */
             j += size;
         }

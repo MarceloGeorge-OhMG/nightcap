@@ -107,6 +107,10 @@ class NightCapSurface(ControlSurface):
             self.song().add_visible_tracks_listener(self._on_tracks_changed)
         except Exception:
             debug('could not listen for track changes: ' + traceback.format_exc())
+        try:
+            self.song().add_is_playing_listener(self._on_playing_changed)
+        except Exception:
+            debug('could not listen for play state: ' + traceback.format_exc())
         self._set_bridge_mode(0)
         self.show_message('NightCap connected (native NightCap)')
         self.log_message('NightCap: native NightCap script with HUD loaded')
@@ -218,6 +222,14 @@ class NightCapSurface(ControlSurface):
                 pass
 
     def _update_crossfader(self):
+        if self._mode == MODE_MIXER and not self._wrapper_active:
+            # Mixer mode: crossfader = master volume
+            try:
+                self._mixer.set_crossfader_control(None)
+                self._crossfader.connect_to(self.song().master_track.mixer_device.volume)
+                return
+            except Exception:
+                debug('crossfader -> master volume failed: ' + traceback.format_exc())
         param = self._nightcap.crossfader_param() if not self._wrapper_active else None
         learning = self._nightcap.learn_armed and self._mode == MODE_NIGHTCAP
         if param is not None:
@@ -238,7 +250,14 @@ class NightCapSurface(ControlSurface):
             self._page_up.send_value(127 if self._nightcap.page < self._nightcap.num_pages - 1 else 0, True)
         else:
             self._update_bank_leds()
-        self._learn.send_value(127 if (nightcap and self._nightcap.learn_armed) else 0, True)
+        if nightcap:
+            learn_on = self._nightcap.learn_armed
+        else:
+            try:
+                learn_on = self.song().is_playing   # Mixer mode: Learn = Play, lit while playing
+            except Exception:
+                learn_on = False
+        self._learn.send_value(127 if learn_on else 0, True)
         self._inst.send_value(127 if self._nightcap.locked else 0, True)
         self._mixer_button.send_value(127 if self._mode == MODE_MIXER else 0, True)
 
@@ -248,6 +267,13 @@ class NightCapSurface(ControlSurface):
             if self._mode == MODE_MIXER and not self._wrapper_active:
                 self._update_button_leds()
                 self.request_hud(False)
+        self.schedule_message(1, refresh)
+
+    def _on_playing_changed(self):
+        # Play/stop changed: keep the Learn light (= Play in Mixer mode) in sync.
+        def refresh():
+            if self._mode == MODE_MIXER and not self._wrapper_active:
+                self._update_button_leds()
         self.schedule_message(1, refresh)
 
     def _update_bank_leds(self):
@@ -280,6 +306,15 @@ class NightCapSurface(ControlSurface):
         self._update_mode()
 
     def _on_learn(self, value):
+        if self._mode == MODE_MIXER and not self._wrapper_active:
+            # Mixer mode: Learn = Play / Stop
+            if value:
+                song = self.song()
+                if song.is_playing:
+                    song.stop_playing()
+                else:
+                    song.start_playing()
+            return
         if self._mode != MODE_NIGHTCAP or self._wrapper_active:
             return
         if value:
@@ -296,6 +331,17 @@ class NightCapSurface(ControlSurface):
         self.nightcap_state_changed()
 
     def _on_view(self, value):
+        if self._mode == MODE_MIXER and not self._wrapper_active:
+            # Mixer mode: View = return to the start of the song
+            self._view.send_value(127 if value else 0, True)
+            if value:
+                song = self.song()
+                try:
+                    song.start_time = 0.0       # where Play starts from next time (Live's insert marker)
+                except Exception:
+                    debug('could not set start_time: ' + traceback.format_exc())
+                song.current_song_time = 0.0    # and move the playhead there now
+            return
         if value and self._mode == MODE_NIGHTCAP and not self._wrapper_active:
             self._nightcap.reset_last()
 
@@ -332,6 +378,15 @@ class NightCapSurface(ControlSurface):
 
     def _on_device_step(self, value, step, button):
         button.send_value(127 if value else 0, True)
+        if self._mode == MODE_MIXER and not self._wrapper_active:
+            # Mixer mode: User / FX = previous / next locator
+            if value:
+                song = self.song()
+                if step < 0 and song.can_jump_to_prev_cue:
+                    song.jump_to_prev_cue()
+                elif step > 0 and song.can_jump_to_next_cue:
+                    song.jump_to_next_cue()
+            return
         if not value or self._wrapper_active:
             return
         song = self.song()
@@ -484,6 +539,10 @@ class NightCapSurface(ControlSurface):
             pass
         try:
             self.song().remove_visible_tracks_listener(self._on_tracks_changed)
+        except Exception:
+            pass
+        try:
+            self.song().remove_is_playing_listener(self._on_playing_changed)
         except Exception:
             pass
         self._nightcap.disconnect()
