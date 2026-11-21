@@ -56,7 +56,10 @@ TOUCH_CCS = list(range(96, 104))
 SPEED_DIAL_CC = 74
 CROSSFADER_CC = 72
 TOP_BUTTON_CCS = list(range(112, 120))
-LEARN, VIEW, PAGE_DOWN, PAGE_UP, USER, FX, INST, MIXER = range(120, 128)
+# Page+ would be CC 123 = MIDI 'All Notes Off', which Live swallows before it reaches this script.
+# So Live sees Page+ as CC 111; NightCapBridge translates 123 <-> 111. Everything else is unchanged.
+LEARN, VIEW, PAGE_DOWN, USER, FX, INST, MIXER = 120, 121, 122, 124, 125, 126, 127
+PAGE_UP = 111
 
 SYSEX_HEADER = (0xF0, 0x7D, 0x4B, 0x4E, 0x43)
 SYSEX_SET_MODE = 0x01
@@ -100,6 +103,10 @@ class NightCapSurface(ControlSurface):
             self._nightcap = NightCapEngine(self, self._encoders, self._crossfader)
             self._update_mode()
         self.song().add_appointed_device_listener(self._on_appointed_device_changed)
+        try:
+            self.song().add_visible_tracks_listener(self._on_tracks_changed)
+        except Exception:
+            debug('could not listen for track changes: ' + traceback.format_exc())
         self._set_bridge_mode(0)
         self.show_message('NightCap connected (native NightCap)')
         self.log_message('NightCap: native NightCap script with HUD loaded')
@@ -137,8 +144,8 @@ class NightCapSurface(ControlSurface):
         self._view.add_value_listener(self._on_view)
         self._page_down.add_value_listener(lambda v: self._on_page_step(v, -1))
         self._page_up.add_value_listener(lambda v: self._on_page_step(v, 1))
-        self._page_down.add_value_listener(self._on_mixer_bank)
-        self._page_up.add_value_listener(self._on_mixer_bank)
+        self._page_down.add_value_listener(lambda v: self._on_mixer_bank(v, -1))
+        self._page_up.add_value_listener(lambda v: self._on_mixer_bank(v, 1))
         self._user.add_value_listener(lambda v: self._on_device_step(v, -1, self._user))
         self._fx.add_value_listener(lambda v: self._on_device_step(v, 1, self._fx))
         self._inst.add_value_listener(self._on_inst)
@@ -183,8 +190,9 @@ class NightCapSurface(ControlSurface):
             strip = self._mixer.channel_strip(i)
             strip.set_volume_control(self._encoders[i] if mixer else None)
             strip.set_mute_button(self._top_buttons[i] if mixer else None)
-        self._session.set_track_bank_buttons(self._page_up if mixer else None,
-                                             self._page_down if mixer else None)
+        # Page -/+ are handled by _on_mixer_bank (jump a whole bank of 8 tracks at a time),
+        # not by the session component, which would only move one track per press.
+        self._session.set_track_bank_buttons(None, None)
         if nightcap:
             self._nightcap.set_active(True)
         self._show_track_box(mixer)
@@ -228,9 +236,29 @@ class NightCapSurface(ControlSurface):
                 btn.send_value(127 if i == self._nightcap.page else 0, True)
             self._page_down.send_value(127 if self._nightcap.page > 0 else 0, True)
             self._page_up.send_value(127 if self._nightcap.page < self._nightcap.num_pages - 1 else 0, True)
+        else:
+            self._update_bank_leds()
         self._learn.send_value(127 if (nightcap and self._nightcap.learn_armed) else 0, True)
         self._inst.send_value(127 if self._nightcap.locked else 0, True)
         self._mixer_button.send_value(127 if self._mode == MODE_MIXER else 0, True)
+
+    def _on_tracks_changed(self):
+        # Tracks were added/removed/hidden: refresh Page -/+ lights and the Mixer screen.
+        def refresh():
+            if self._mode == MODE_MIXER and not self._wrapper_active:
+                self._update_button_leds()
+                self.request_hud(False)
+        self.schedule_message(1, refresh)
+
+    def _update_bank_leds(self):
+        """Mixer mode: Page -/+ light up when there is a bank of 8 tracks to move to."""
+        try:
+            count = len(list(self.song().visible_tracks))
+            offset = self._session.track_offset()
+        except Exception:
+            count, offset = 0, 0
+        self._page_down.send_value(127 if offset > 0 else 0, True)
+        self._page_up.send_value(127 if offset + 8 < count else 0, True)
 
     def nightcap_state_changed(self):
         """Called by NightCapEngine after learn finishes / pages change."""
@@ -320,10 +348,22 @@ class NightCapSurface(ControlSurface):
         self._hud_dirty = True
         self._hud_pop = self._hud_pop or pop
 
-    def _on_mixer_bank(self, value):
-        if self._mode == MODE_MIXER:
-            # the session component moves the red box on this press; refresh after it
-            self.schedule_message(1, lambda: self.request_hud(True))
+    def _on_mixer_bank(self, value, step):
+        if not value or self._mode != MODE_MIXER or self._wrapper_active:
+            return
+        try:
+            count = len(list(self.song().visible_tracks))
+            offset = self._session.track_offset()
+            if step > 0:
+                new_offset = offset + 8 if offset + 8 < count else offset
+            else:
+                new_offset = max(0, offset - 8)
+            if new_offset != offset:
+                self._session.set_offsets(new_offset, self._session.scene_offset())
+        except Exception:
+            debug('mixer bank jump failed: ' + traceback.format_exc())
+        self._update_button_leds()
+        self.schedule_message(1, lambda: self.request_hud(True))
 
     def _mixer_hud_state(self):
         song = self.song()
@@ -440,6 +480,10 @@ class NightCapSurface(ControlSurface):
     def disconnect(self):
         try:
             self.song().remove_appointed_device_listener(self._on_appointed_device_changed)
+        except Exception:
+            pass
+        try:
+            self.song().remove_visible_tracks_listener(self._on_tracks_changed)
         except Exception:
             pass
         self._nightcap.disconnect()
