@@ -115,3 +115,18 @@ hardware you own. Ableton and Live are trademarks of Ableton AG.
 ## Licence
 [Apache License 2.0](LICENSE). See [NOTICE](NOTICE). The optional `wrapper/` links JUCE (AGPLv3/commercial), so binaries built
 from it follow JUCE's terms. See [wrapper/README.md](wrapper/README.md).
+
+## About this fork
+
+This is an **unofficial fork** of [NightCap](https://github.com/digitui/nightcap) by Brendan McEnroe,
+used under the Apache License 2.0 (see `LICENSE` and `NOTICE`). It is not affiliated with or
+endorsed by the original author, Novation or Ableton.
+
+Changes made by Marcelo George (macOS Apple Silicon, Ableton Live 12):
+
+- Page+ now works: Live swallows MIDI CC 123 ("All Notes Off"), so the bridge sends it to Live as CC 111.
+- Fixed the LED ring of encoder 1 being garbled by crossfader feedback (CC 72).
+- Mixer mode: Page-/Page+ jump 8 tracks with matching lights; Learn = Play/Stop, View = return to start,
+  User/FX = previous/next locator, crossfader = master volume.
+
+Debugged and tested on real hardware, with help from Claude.
