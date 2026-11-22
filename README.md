@@ -130,3 +130,17 @@ Changes made by Marcelo George (macOS Apple Silicon, Ableton Live 12):
   User/FX = previous/next locator, crossfader = master volume.
 
 Debugged and tested on real hardware, with help from Claude.
+
+## Install this fork (macOS)
+
+You need macOS, Ableton Live 12 and the Xcode Command Line Tools (`xcode-select --install`).
+Open Terminal and run:
+
+    git clone https://github.com/MarceloGeorge-OhMG/nightcap.git
+    cd nightcap
+    sh install.sh
+
+This builds the bridge on your own Mac and installs it together with the Live script.
+To update later, run `git pull` inside the `nightcap` folder, then `sh install.sh` again.
+
+Tested on macOS (Apple Silicon) with Ableton Live 12 and a Novation Nocturn. Other setups are untested.
